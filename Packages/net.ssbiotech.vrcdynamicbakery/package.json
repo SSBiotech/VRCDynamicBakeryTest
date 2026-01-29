@@ -1,0 +1,19 @@
+{
+  "name": "net.ssbiotech.vrcdynamicbakery",
+  "displayName": "VRCDynamicBakery",
+  "version": "0.2.5",
+  "unity": "2022.3",
+  "description": "Dynamic Baked Lights for VRChat",
+  "gitDependencies": {},
+  "vpmDependencies": {
+    "com.vrchat.worlds": "3.10.1"
+  },
+  "author": {
+    "name": "S&S Biotech Inc.",
+    "email": "contact@ssbiotech.net",
+    "url": "https://ssbiotech.net/about"
+  },
+  "legacyFolders": {},
+  "legacyFiles": {},
+  "localPath": "E:\\VRChat\\VRCDynamicBakery\\Packages\\net.ssbiotech.vrcdynamicbakery"
+}
