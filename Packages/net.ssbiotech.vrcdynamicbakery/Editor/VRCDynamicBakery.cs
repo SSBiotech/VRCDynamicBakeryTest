@@ -1,15 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-#if UNITY_EDITOR
+﻿#if UNITY_EDITOR
 using UnityEditor;
-#endif
-using UnityEngine;
-#if UNITY_EDITOR
+using static UnityEditor.EditorUtility;
 using static UnityEditor.AssetDatabase;
 using static UnityEditor.AssetImporter;
 #endif
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using UnityEngine;
+using UnityEngine.Rendering;
 using static UnityEngine.GUILayout;
 
 namespace Editor {
@@ -19,7 +18,6 @@ namespace Editor {
         private static bool _areasFoldout = true;
         private static Vector2 _areaScrollPos;
         private static bool _debugFoldout;
-        private static bool _initialized;
 
         [MenuItem("Tools/VRC Dynamic Bakery")]
         public static void OpenWindow() {
@@ -27,7 +25,7 @@ namespace Editor {
         }
 
         public void CreateGUI() {
-            _initialized = false;
+            _areas = FindObjectsOfType<BakedLightArea>();
         }
 
         public void OnGUI() {
@@ -35,42 +33,52 @@ namespace Editor {
 
             BeginHorizontal();
 
+            var areas = _areas.Where(it => it != null).ToArray();
             if (Button("Bake All", ExpandWidth(false))) {
+                DisplayProgressBar("[VRCDynamicBakery]", "Baking Lightmaps", 0.5F);
+
                 ClearLightmaps();
-                ClearFields();
-                PopulateFields();
+                ClearFields(areas);
+                PopulateFields(areas);
                 PreBakeLightmaps();
-                BakeLightmaps(_areas.Where(it => it != null).ToArray());
-                PostBakeLightmaps();
-                Thread.Sleep(1000);
-                FetchLightmaps();
+                BakeLightmaps(areas);
+                PostBakeLightmaps(areas);
+                FetchLightmaps(areas);
                 SetDefaults();
-                _initialized = true;
+
+                ClearProgressBar();
+                Refresh();
             }
 
+            GUI.enabled = _areas.All(area => area.instances.Any(it => it != null));
             if (Button("Refresh All", ExpandWidth(false))) {
-                ClearFields();
-                PopulateFields();
+                DisplayProgressBar("[VRCDynamicBakery]", "Refreshing Lightmaps", 0.5F);
+
+                ClearFields(areas);
+                PopulateFields(areas);
                 PreBakeLightmaps();
-                PostBakeLightmaps();
-                Thread.Sleep(1000);
-                FetchLightmaps();
+                PostBakeLightmaps(areas);
+                FetchLightmaps(areas);
                 SetDefaults();
-                _initialized = true;
+
+                ClearProgressBar();
+                Refresh();
+            }
+            GUI.enabled = true;
+
+            if (Button("Clear All", ExpandWidth(false))) {
+                DisplayProgressBar("[VRCDynamicBakery]", "Clearing Lightmaps", 0.5F);
+
+                ClearLightmaps();
+                ClearFields(areas);
+
+                ClearProgressBar();
+                Refresh();
+                _areas = FindObjectsOfType<BakedLightArea>();
             }
 
             FlexibleSpace();
-
             EndHorizontal();
-            if (_areas.Count(it => it != null) == 0) {
-                EditorGUILayout.Space();
-                Label(
-                    _initialized
-                        ? "No BakedLightAreas detected, please add one to get started."
-                        : "Modifications detected, please refresh to continue.",
-                    new GUIStyle(EditorStyles.label) { normal = { textColor = _initialized ? Color.red : Color.white } }
-                );
-            }
             EditorGUILayout.Space();
             _areasFoldout = EditorGUILayout.Foldout(_areasFoldout, "Areas");
             if (_areasFoldout) {
@@ -84,14 +92,19 @@ namespace Editor {
                         new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter }
                     );
                     if (Button("B", ExpandWidth(false))) {
-                        ClearFields();
-                        PopulateFields();
+                        DisplayProgressBar("[VRCDynamicBakery]", "Baking Lightmaps", 0.5F);
+
+                        var selectedArea = new[] { area };
+                        ClearFields(selectedArea);
+                        PopulateFields(selectedArea);
                         PreBakeLightmaps();
-                        BakeLightmaps(new[] { area });
-                        PostBakeLightmaps();
-                        Thread.Sleep(1000);
-                        FetchLightmaps();
+                        BakeLightmaps(selectedArea);
+                        PostBakeLightmaps(selectedArea);
+                        FetchLightmaps(selectedArea);
                         SetDefaults();
+
+                        ClearProgressBar();
+                        Refresh();
                     }
                     if (Button("S", ExpandWidth(false)))
                         Selection.activeGameObject = area.gameObject;
@@ -122,15 +135,48 @@ namespace Editor {
             EditorGUILayout.Space();
             _debugFoldout = EditorGUILayout.Foldout(_debugFoldout, "Debug");
             if (_debugFoldout) {
-                if (Button("Populate Fields")) PopulateFields();
-                if (Button("Pre Bake Lightmaps")) PreBakeLightmaps();
-                if (Button("Bake Lightmaps")) BakeLightmaps(_areas.Where(it => it != null).ToArray());
-                if (Button("Post Bake Lightmaps")) PostBakeLightmaps();
-                if (Button("Fetch Lightmaps")) FetchLightmaps();
-                if (Button("Set Defaults")) SetDefaults();
-                if (Button("Clear Lightmaps")) ClearLightmaps();
-                if (Button("Clear Fields")) ClearFields();
+                if (Button("Clear Lightmaps")) {
+                    ClearLightmaps();
+                    ClearProgressBar();
+                    Refresh();
+                }
+                if (Button("Clear Fields")) {
+                    ClearFields(areas);
+                    ClearProgressBar();
+                    Refresh();
+                }
+                if (Button("Populate Fields")) {
+                    PopulateFields(areas);
+                    ClearProgressBar();
+                    Refresh();
+                }
+                if (Button("Pre Bake Lightmaps")) {
+                    PreBakeLightmaps();
+                    ClearProgressBar();
+                    Refresh();
+                }
+                if (Button("Bake Lightmaps")) {
+                    BakeLightmaps(areas);
+                    ClearProgressBar();
+                    Refresh();
+                }
+                if (Button("Post Bake Lightmaps")) {
+                    PostBakeLightmaps(areas);
+                    ClearProgressBar();
+                    Refresh();
+                }
+                if (Button("Fetch Lightmaps")) {
+                    FetchLightmaps(areas);
+                    ClearProgressBar();
+                    Refresh();
+                }
+                if (Button("Set Defaults")) {
+                    SetDefaults();
+                    ClearProgressBar();
+                    Refresh();
+                }
             }
+            EditorGUILayout.Space();
         }
 
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -138,14 +184,24 @@ namespace Editor {
         private static void ClearLightmaps() {
             foreach (var instance in FindObjectsOfType<BakedLightInstance>(true))
             foreach (var lightmap in instance.lightmaps.Where(it => it != null))
-                DeleteAsset(GetAssetPath(lightmap));
+                DeleteAsset(AssetDatabase.GetAssetPath(lightmap));
             RenderSettings.skybox = null;
             Lightmapping.Clear();
             Lightmapping.ClearLightingDataAsset();
         }
 
-        private static void ClearFields() {
-            foreach (var area in FindObjectsOfType<BakedLightArea>(true)) {
+        private static void ClearFields(BakedLightArea[] areas) {
+            foreach (var area in areas) {
+                foreach (var instance in area.instances) DestroyImmediate(instance);
+                foreach (var config in area.configs) {
+                    if (config.toggledObjects != null)
+                        config.toggledObjects = config.toggledObjects.Where(it => it != null).ToArray();
+                    config.SetObjectVisibility(true);
+                    config.PipelineSetLightVisibility(true);
+                    config.nonStaticObjects = Array.Empty<GameObject>();
+                    config.staticRenderers = Array.Empty<Renderer>();
+                    config.staticColliders = Array.Empty<Collider>();
+                }
                 if (area.bakedObjects != null) area.bakedObjects = area.bakedObjects.Where(it => it != null).ToArray();
                 area.renderers = Array.Empty<Renderer>();
                 area.probes = Array.Empty<ReflectionProbe>();
@@ -154,21 +210,10 @@ namespace Editor {
                 var instances = area.transform.Find("_vdbInstances");
                 if (instances != null) DestroyImmediate(instances.gameObject);
             }
-            foreach (var config in FindObjectsOfType<BakedLightConfig>(true)) {
-                if (config.toggledObjects != null)
-                    config.toggledObjects = config.toggledObjects.Where(it => it != null).ToArray();
-                config.SetObjectVisibility(true);
-                config.PipelineSetLightVisibility(true);
-                config.nonStaticObjects = Array.Empty<GameObject>();
-                config.staticRenderers = Array.Empty<Renderer>();
-                config.staticColliders = Array.Empty<Collider>();
-            }
-            foreach (var instance in FindObjectsOfType<BakedLightInstance>(true)) DestroyImmediate(instance);
         }
 
-        private static void PopulateFields() {
-            _areas = FindObjectsOfType<BakedLightArea>();
-            foreach (var area in _areas) {
+        private static void PopulateFields(BakedLightArea[] areas) {
+            foreach (var area in areas) {
                 if (area.bakedObjects == null || area.bakedObjects.Length == 0)
                     area.bakedObjects = new[] { area.gameObject };
                 area.renderers = area.bakedObjects
@@ -277,21 +322,29 @@ namespace Editor {
             foreach (var renderer in _disabledRenderers)
                 renderer.gameObject.SetActive(false);
             foreach (var area in _areas.Where(it => it != null)) {
-                foreach (var probe in area.probes)
-                    probe.enabled = false;
                 foreach (var config in area.configs.Where(it => it != null)) {
                     config.PipelineSetObjectVisibility(false);
                     config.PipelineSetLightVisibility(false);
                 }
             }
+            foreach (var probe in FindObjectsOfType<ReflectionProbe>(true)) {
+                probe.enabled = false;
+            }
         }
 
         private static void BakeLightmaps(BakedLightArea[] areas) {
+            var totalInstances = areas.SelectMany(area => area.instances.Where(it => it != null)).Count();
+            var current = 1;
             foreach (var area in areas) {
                 foreach (var renderer in area.GetComponentsInChildren<Renderer>(true).Where(IsStatic))
                     renderer.gameObject.SetActive(true);
                 var instances = area.instances.Where(it => it != null).ToList();
                 for (var idx = instances.Count - 1; idx >= 0; --idx) {
+                    DisplayProgressBar(
+                        "[VRCDynamicBakery]",
+                        $"Baking Lightmaps ({current++} of {totalInstances})",
+                        0.5F
+                    );
                     var instance = instances[idx];
                     foreach (var config in instance.configs.Where(it => it != null)) {
                         config.PipelineSetObjectVisibility(true);
@@ -304,9 +357,12 @@ namespace Editor {
                     for (var lightmapIndex = 0; lightmapIndex < LightmapSettings.lightmaps.Length; ++lightmapIndex) {
                         var color = $"Assets/VRCDynamicBakery/{GetLightmapName(instance, lightmapIndex)}.exr";
                         DeleteAsset(color);
-                        CopyAsset(GetAssetPath(LightmapSettings.lightmaps[lightmapIndex].lightmapColor), color);
+                        CopyAsset(
+                            AssetDatabase.GetAssetPath(LightmapSettings.lightmaps[lightmapIndex].lightmapColor),
+                            color
+                        );
                         var lightmap = LoadAssetAtPath<Texture2D>(color);
-                        var importer = GetAtPath(GetAssetPath(lightmap)) as TextureImporter;
+                        var importer = GetAtPath(AssetDatabase.GetAssetPath(lightmap)) as TextureImporter;
                         if (importer == null) continue;
                         importer.filterMode = FilterMode.Point;
                         importer.SaveAndReimport();
@@ -323,16 +379,14 @@ namespace Editor {
             }
         }
 
-        private static void PostBakeLightmaps() {
+        private static void PostBakeLightmaps(BakedLightArea[] areas) {
             foreach (var renderer in _disabledRenderers)
                 renderer.gameObject.SetActive(true);
             foreach (var area in _areas.Where(it => it != null)) {
-                foreach (var probe in area.probes)
-                    probe.enabled = true;
                 foreach (var config in area.configs.Where(it => it != null))
                     config.PipelineSetObjectVisibility(true);
             }
-            foreach (var area in _areas.Where(it => it != null))
+            foreach (var area in areas)
             foreach (var config in area.instances[0].configs.Where(it => it != null))
                 config.PipelineSetLightVisibility(true);
             var resolution = Lightmapping.lightingSettings.lightmapResolution;
@@ -344,10 +398,13 @@ namespace Editor {
                 config.PipelineSetLightVisibility(false);
                 config.SetObjectVisibility(false);
             }
+            foreach (var probe in FindObjectsOfType<ReflectionProbe>(true)) {
+                probe.enabled = true;
+            }
         }
 
-        private static void FetchLightmaps() {
-            foreach (var area in _areas.Where(it => it != null)) {
+        private static void FetchLightmaps(BakedLightArea[] areas) {
+            foreach (var area in areas) {
                 foreach (var instance in area.instances.Where(it => it != null)) {
                     var colors = new List<Texture2D>();
                     if (!IsValidFolder("Assets/VRCDynamicBakery"))
@@ -365,7 +422,7 @@ namespace Editor {
         }
 
         private static void SetDefaults() {
-            foreach (var area in _areas.Where(it => it != null)) {
+            foreach (var area in _areas.Where(area => area.instances.Any(it => it != null))) {
                 area.Block ??= new MaterialPropertyBlock();
                 area.Activate(area.instances.First().index);
                 SceneView.RepaintAll();
